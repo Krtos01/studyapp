@@ -82,10 +82,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Convert Buffer to a readable stream for googleapis
-    const stream = new Readable();
-    stream.push(buffer);
-    stream.push(null);
+    // Convert Buffer to a readable stream for googleapis using Readable.from
+    // This is much safer for Vercel Serverless environments
+    const stream = Readable.from(buffer);
 
     const uploaded = await uploadFile(
       session.accessToken,
