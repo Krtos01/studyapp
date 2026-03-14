@@ -37,6 +37,7 @@ export default function CourseDetailPage() {
   const [viewport, setViewport] = useState({ x: 60, y: 60, zoom: 1 });
   const [selectedNode, setSelectedNode] = useState<CanvasNodeData | null>(null);
   const [loading, setLoading] = useState(true);
+  const canvasMainRef = useRef<HTMLDivElement>(null);
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const stateRef = useRef({ nodes, links, viewport });
@@ -127,7 +128,23 @@ export default function CourseDetailPage() {
   };
 
   const handleOpenInDrive = (fileId: string) => {
-    window.open(`https://drive.google.com/file/d/${fileId}/view`, "_blank");
+    // Get canvas-main area dimensions for popup sizing
+    const rect = canvasMainRef.current?.getBoundingClientRect();
+    const areaW = rect?.width ?? window.innerWidth;
+    const areaH = rect?.height ?? window.innerHeight;
+    const areaLeft = rect?.left ?? 0;
+    const areaTop = rect?.top ?? 0;
+
+    const popupW = Math.round(areaW * 0.8);
+    const popupH = Math.round(areaH * 0.8);
+    const popupLeft = Math.round(window.screenX + areaLeft + (areaW - popupW) / 2);
+    const popupTop = Math.round(window.screenY + areaTop + (areaH - popupH) / 2);
+
+    window.open(
+      `https://drive.google.com/file/d/${fileId}/preview`,
+      "_blank",
+      `popup=yes,width=${popupW},height=${popupH},left=${popupLeft},top=${popupTop}`
+    );
   };
 
   const handleRemoveFromCanvas = (fileId: string) => {
@@ -188,7 +205,7 @@ export default function CourseDetailPage() {
       </div>
 
       {/* Main area */}
-      <div className="canvas-main">
+      <div className="canvas-main" ref={canvasMainRef}>
         {loading ? (
           <div className="loading-container" style={{ flex: 1 }}>
             <div className="spinner" />

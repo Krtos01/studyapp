@@ -265,15 +265,15 @@ export default function Canvas({
       if (linking) {
         // Check if dropped on a node (with increased threshold)
         const pos = screenToCanvas(e.clientX, e.clientY);
-        const PADDING = 20 / viewport.zoom; // 20px extra drop zone margin
+        const PADDING = 20; // 20px extra drop zone margin (in canvas coords)
 
         const targetNode = nodes.find(
           (n) =>
             n.fileId !== linking.fromId &&
             pos.x >= n.x - PADDING &&
-            pos.x <= n.x + (NODE_WIDTH / viewport.zoom) + PADDING &&
+            pos.x <= n.x + NODE_WIDTH + PADDING &&
             pos.y >= n.y - PADDING &&
-            pos.y <= n.y + (NODE_HEIGHT / viewport.zoom) + PADDING
+            pos.y <= n.y + NODE_HEIGHT + PADDING
         );
 
         if (targetNode) {
@@ -345,8 +345,8 @@ export default function Canvas({
     if (!node) return;
     setLinking({
       fromId: nodeId,
-      mouseX: node.x + NODE_WIDTH / viewport.zoom / 2,
-      mouseY: node.y + NODE_HEIGHT / viewport.zoom / 2,
+      mouseX: node.x + NODE_WIDTH / 2,
+      mouseY: node.y + NODE_HEIGHT / 2,
     });
   };
 
@@ -377,12 +377,12 @@ export default function Canvas({
     if (!fromNode || !toNode) return null;
 
     const fromScreen = canvasToScreen(
-      fromNode.x + NODE_WIDTH / viewport.zoom / 2,
-      fromNode.y + NODE_HEIGHT / viewport.zoom / 2
+      fromNode.x + NODE_WIDTH / 2,
+      fromNode.y + NODE_HEIGHT / 2
     );
     const toScreen = canvasToScreen(
-      toNode.x + NODE_WIDTH / viewport.zoom / 2,
-      toNode.y + NODE_HEIGHT / viewport.zoom / 2
+      toNode.x + NODE_WIDTH / 2,
+      toNode.y + NODE_HEIGHT / 2
     );
 
     const dx = toScreen.x - fromScreen.x;
@@ -429,8 +429,8 @@ export default function Canvas({
     if (!fromNode) return null;
 
     const fromScreen = canvasToScreen(
-      fromNode.x + NODE_WIDTH / viewport.zoom / 2,
-      fromNode.y + NODE_HEIGHT / viewport.zoom / 2
+      fromNode.x + NODE_WIDTH / 2,
+      fromNode.y + NODE_HEIGHT / 2
     );
     const toScreen = canvasToScreen(linking.mouseX, linking.mouseY);
 
