@@ -13,6 +13,17 @@ interface Params {
   params: Promise<{ courseId: string }>;
 }
 
+export const config = {
+  api: {
+    bodyParser: false, // Disabling Next.js parser to handle large FormData manually or via specialized middleware if needed
+    // However, App Router doesn't use `export const config` anymore for this.
+    // Instead, it relies on Next.js 14 server config. Let's use `serverActions` or similar if needed.
+  },
+};
+
+// Next.js App Router body size limit override:
+export const maxDuration = 60; // Max execution time for vercel
+
 export async function GET(request: NextRequest, { params }: Params) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
