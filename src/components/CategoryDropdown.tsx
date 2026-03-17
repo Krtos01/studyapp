@@ -32,6 +32,7 @@ export default function CategoryDropdown({
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,10 +53,13 @@ export default function CategoryDropdown({
     setLoading(true);
     try {
       const res = await fetch(
-        `/api/courses/${courseId}/files?category=${encodeURIComponent(categoryName)}`
+        `/api/courses/${courseId}/files?category=${encodeURIComponent(categoryName)}&t=${Date.now()}`
       );
       if (res.ok) {
         setFiles(await res.json());
+        setHasFetched(true);
+      } else {
+        alert("Dosyalar alınırken bir hata oluştu.");
       }
     } catch (err) {
       console.error("Failed to fetch files:", err);
@@ -65,7 +69,7 @@ export default function CategoryDropdown({
   };
 
   const handleToggle = () => {
-    if (!open) fetchFiles();
+    if (!open && !hasFetched) fetchFiles();
     setOpen(!open);
   };
 
@@ -77,14 +81,19 @@ export default function CategoryDropdown({
         const formData = new FormData();
         formData.append("file", file);
         formData.append("category", categoryName);
-        await fetch(`/api/courses/${courseId}/files`, {
+        const res = await fetch(`/api/courses/${courseId}/files`, {
           method: "POST",
           body: formData,
         });
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          alert(`Hata: ${file.name} yüklenemedi. ${errorData.error || ""}`);
+        }
       }
       await fetchFiles();
     } catch (err) {
       console.error("Upload failed:", err);
+      alert("Ağ hatası nedeniyle dosya yüklenemedi.");
     } finally {
       setUploading(false);
     }
@@ -102,13 +111,27 @@ export default function CategoryDropdown({
         <div className="dropdown-menu">
           <div className="dropdown-header">
             <span>{label}</span>
-            <button
-              className="btn btn-sm btn-primary"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-            >
-              {uploading ? "⏳" : "📤"} Yükle
-            </button>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button
+                className="btn btn-sm btn-ghost"
+                style={{ padding: "0 0.5rem", fontSize: "1rem" }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fetchFiles();
+                }}
+                disabled={loading}
+                title="Yenile"
+              >
+                🔄
+              </button>
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? "⏳" : "📤"} Yükle
+              </button>
+            </div>
             <input
               ref={fileInputRef}
               type="file"

@@ -212,6 +212,7 @@ export async function listFiles(
     q: `'${folderId}' in parents and trashed=false`,
     fields: "files(id, name, mimeType, size, createdTime, webViewLink)",
     orderBy: "createdTime desc",
+    pageSize: 1000,
     spaces: "drive",
   });
 

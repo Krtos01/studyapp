@@ -40,6 +40,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     }
 
     const files = await listFiles(session.accessToken, catFolder.id);
+    console.log(`[Drive API Sync] Fetched ${files.length} files for category '${category}' from folder ID: ${catFolder.id}`);
     return NextResponse.json(files);
   } catch (error) {
     console.error("Error listing files:", error);
