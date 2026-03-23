@@ -23,13 +23,25 @@ export interface CanvasLinkData {
   to: string;
 }
 
+export interface StickyNoteData {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: "yellow" | "green" | "blue" | "purple";
+}
+
 interface CanvasProps {
   courseId: string;
   nodes: CanvasNodeData[];
   links: CanvasLinkData[];
+  stickyNotes: StickyNoteData[];
   viewport: { x: number; y: number; zoom: number };
   onNodesChange: (nodes: CanvasNodeData[]) => void;
   onLinksChange: (links: CanvasLinkData[]) => void;
+  onStickyNotesChange: (notes: StickyNoteData[]) => void;
   onViewportChange: (viewport: { x: number; y: number; zoom: number }) => void;
   onNodeSelect: (node: CanvasNodeData | null) => void;
   selectedNodeId: string | null;
@@ -63,8 +75,11 @@ function getCategoryColor(category: string): string {
 
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 72;
+const STICKY_MIN_W = 120;
+const STICKY_MIN_H = 80;
+const STICKY_COLORS: StickyNoteData["color"][] = ["yellow", "green", "blue", "purple"];
 
-// Subcomponent for node to manage its own thumbnail state
+// ─── File Node Card ──────────────────────────────────────────
 function CanvasNodeCard({
   node,
   zoom,
@@ -96,7 +111,6 @@ function CanvasNodeCard({
     if (!isImage) return;
     let active = true;
 
-    // Fetch the thumbnail using the download route
     fetch(`/api/courses/${courseId}/files/${node.fileId}/download`)
       .then((res) => {
         if (!res.ok) throw new Error("Thumbnail fetch failed");
@@ -156,14 +170,107 @@ function CanvasNodeCard({
   );
 }
 
+// ─── Sticky Note Card ────────────────────────────────────────
+function StickyNoteCard({
+  note,
+  zoom,
+  screenPos,
+  isSelected,
+  isDragging,
+  onMouseDown,
+  onTextChange,
+  onColorChange,
+  onResizeStart,
+  onStartLink,
+  onContextMenu,
+}: {
+  note: StickyNoteData;
+  zoom: number;
+  screenPos: { x: number; y: number };
+  isSelected: boolean;
+  isDragging: boolean;
+  onMouseDown: (e: ReactMouseEvent) => void;
+  onTextChange: (text: string) => void;
+  onColorChange: (color: StickyNoteData["color"]) => void;
+  onResizeStart: (e: ReactMouseEvent, dir: "right" | "bottom" | "corner") => void;
+  onStartLink: (e: ReactMouseEvent) => void;
+  onContextMenu: (e: ReactMouseEvent) => void;
+}) {
+  return (
+    <div
+      className={`sticky-note color-${note.color} ${isSelected ? "selected" : ""} ${isDragging ? "dragging" : ""}`}
+      style={{
+        left: screenPos.x,
+        top: screenPos.y,
+        width: note.width * zoom,
+        height: note.height * zoom,
+        transformOrigin: "top left",
+      }}
+      onMouseDown={onMouseDown}
+      onContextMenu={onContextMenu}
+    >
+      {/* Drag bar at top */}
+      <div className="sticky-note-dragbar" onMouseDown={onMouseDown}>
+        {/* Color picker dots inside drag bar */}
+        <div className="sticky-note-colors">
+          {STICKY_COLORS.map((c) => (
+            <div
+              key={c}
+              className={`sticky-note-color-dot dot-${c} ${note.color === c ? "active" : ""}`}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                onColorChange(c);
+              }}
+            />
+          ))}
+        </div>
+      </div>
 
+      {/* Textarea */}
+      <textarea
+        className="sticky-note-textarea"
+        value={note.text}
+        placeholder="Not yaz..."
+        onChange={(e) => onTextChange(e.target.value)}
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{ fontSize: `${0.82 * zoom}rem` }}
+      />
+
+      {/* Resize handles */}
+      <div
+        className="sticky-note-resize resize-right"
+        onMouseDown={(e) => { e.stopPropagation(); onResizeStart(e, "right"); }}
+      />
+      <div
+        className="sticky-note-resize resize-bottom"
+        onMouseDown={(e) => { e.stopPropagation(); onResizeStart(e, "bottom"); }}
+      />
+      <div
+        className="sticky-note-resize resize-corner"
+        onMouseDown={(e) => { e.stopPropagation(); onResizeStart(e, "corner"); }}
+      />
+
+      {/* Link handle */}
+      <div
+        className="sticky-note-handle"
+        onMouseDown={onStartLink}
+        title="Bağlantı oluştur"
+      />
+    </div>
+  );
+}
+
+
+// ─── Main Canvas Component ───────────────────────────────────
 export default function Canvas({
   courseId,
   nodes,
   links,
+  stickyNotes,
   viewport,
   onNodesChange,
   onLinksChange,
+  onStickyNotesChange,
   onViewportChange,
   onNodeSelect,
   selectedNodeId,
@@ -172,6 +279,7 @@ export default function Canvas({
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [draggingNode, setDraggingNode] = useState<string | null>(null);
+  const [draggingNote, setDraggingNote] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [linking, setLinking] = useState<{
     fromId: string;
@@ -181,8 +289,22 @@ export default function Canvas({
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
-    nodeId: string;
+    nodeId?: string;
+    noteId?: string;
   } | null>(null);
+
+  // Resize state
+  const [resizing, setResizing] = useState<{
+    noteId: string;
+    dir: "right" | "bottom" | "corner";
+    startMouseX: number;
+    startMouseY: number;
+    startW: number;
+    startH: number;
+  } | null>(null);
+
+  // Selected sticky note (separate from file node)
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
   // Screen to canvas coords
   const screenToCanvas = useCallback(
@@ -212,6 +334,7 @@ export default function Canvas({
     setIsPanning(true);
     setPanStart({ x: e.clientX - viewport.x, y: e.clientY - viewport.y });
     onNodeSelect(null);
+    setSelectedNoteId(null);
     setContextMenu(null);
   };
 
@@ -235,38 +358,59 @@ export default function Canvas({
         onNodesChange(updated);
       }
 
+      if (draggingNote) {
+        const pos = screenToCanvas(e.clientX, e.clientY);
+        const updated = stickyNotes.map((n) =>
+          n.id === draggingNote
+            ? { ...n, x: pos.x - dragOffset.x, y: pos.y - dragOffset.y }
+            : n
+        );
+        onStickyNotesChange(updated);
+      }
+
+      if (resizing) {
+        const dx = (e.clientX - resizing.startMouseX) / viewport.zoom;
+        const dy = (e.clientY - resizing.startMouseY) / viewport.zoom;
+        const updated = stickyNotes.map((n) => {
+          if (n.id !== resizing.noteId) return n;
+          let newW = n.width;
+          let newH = n.height;
+          if (resizing.dir === "right" || resizing.dir === "corner") {
+            newW = Math.max(STICKY_MIN_W, resizing.startW + dx);
+          }
+          if (resizing.dir === "bottom" || resizing.dir === "corner") {
+            newH = Math.max(STICKY_MIN_H, resizing.startH + dy);
+          }
+          return { ...n, width: newW, height: newH };
+        });
+        onStickyNotesChange(updated);
+      }
+
       if (linking) {
         const pos = screenToCanvas(e.clientX, e.clientY);
         setLinking({ ...linking, mouseX: pos.x, mouseY: pos.y });
       }
     },
     [
-      isPanning,
-      panStart,
-      viewport,
-      draggingNode,
-      dragOffset,
-      nodes,
-      linking,
-      onViewportChange,
-      onNodesChange,
-      screenToCanvas,
+      isPanning, panStart, viewport,
+      draggingNode, draggingNote, dragOffset,
+      nodes, stickyNotes, linking, resizing,
+      onViewportChange, onNodesChange, onStickyNotesChange, screenToCanvas,
     ]
   );
 
   const handleMouseUp = useCallback(
     (e: ReactMouseEvent) => {
       if (isPanning) setIsPanning(false);
-
-      if (draggingNode) {
-        setDraggingNode(null);
-      }
+      if (draggingNode) setDraggingNode(null);
+      if (draggingNote) setDraggingNote(null);
+      if (resizing) setResizing(null);
 
       if (linking) {
-        // Check if dropped on a node (with increased threshold)
         const pos = screenToCanvas(e.clientX, e.clientY);
-        const PADDING = 20; // 20px extra drop zone margin (in canvas coords)
+        const PADDING = 20;
 
+        // Check file nodes
         const targetNode = nodes.find(
           (n) =>
             n.fileId !== linking.fromId &&
@@ -276,20 +420,31 @@ export default function Canvas({
             pos.y <= n.y + NODE_HEIGHT + PADDING
         );
 
-        if (targetNode) {
-          // Check no duplicate link
+        // Check sticky notes
+        const targetNote = stickyNotes.find(
+          (n) =>
+            n.id !== linking.fromId &&
+            pos.x >= n.x - PADDING &&
+            pos.x <= n.x + n.width + PADDING &&
+            pos.y >= n.y - PADDING &&
+            pos.y <= n.y + n.height + PADDING
+        );
+
+        const targetId = targetNode?.fileId ?? targetNote?.id;
+
+        if (targetId) {
           const exists = links.some(
             (l) =>
-              (l.from === linking.fromId && l.to === targetNode.fileId) ||
-              (l.from === targetNode.fileId && l.to === linking.fromId)
+              (l.from === linking.fromId && l.to === targetId) ||
+              (l.from === targetId && l.to === linking.fromId)
           );
           if (!exists) {
             onLinksChange([
               ...links,
               {
-                id: `${linking.fromId}-${targetNode.fileId}`,
+                id: `${linking.fromId}-${targetId}`,
                 from: linking.fromId,
-                to: targetNode.fileId,
+                to: targetId,
               },
             ]);
           }
@@ -297,7 +452,7 @@ export default function Canvas({
         setLinking(null);
       }
     },
-    [isPanning, draggingNode, linking, nodes, links, viewport.zoom, screenToCanvas, onLinksChange]
+    [isPanning, draggingNode, draggingNote, resizing, linking, nodes, stickyNotes, links, screenToCanvas, onLinksChange]
   );
 
   // Zoom handling
@@ -325,7 +480,7 @@ export default function Canvas({
     return () => container.removeEventListener("wheel", handleWheel);
   }, [viewport, onViewportChange]);
 
-  // Node drag start
+  // ─── File Node handlers ──────────────────────────────────
   const handleNodeMouseDown = (e: ReactMouseEvent, nodeId: string) => {
     e.stopPropagation();
     setContextMenu(null);
@@ -336,25 +491,69 @@ export default function Canvas({
     setDragOffset({ x: pos.x - node.x, y: pos.y - node.y });
     setDraggingNode(nodeId);
     onNodeSelect(node);
+    setSelectedNoteId(null);
   };
 
-  // Start linking
-  const handleStartLink = (e: ReactMouseEvent, nodeId: string) => {
+  const handleStartLink = (e: ReactMouseEvent, fromId: string) => {
     e.stopPropagation();
-    const node = nodes.find((n) => n.fileId === nodeId);
-    if (!node) return;
-    setLinking({
-      fromId: nodeId,
-      mouseX: node.x + NODE_WIDTH / 2,
-      mouseY: node.y + NODE_HEIGHT / 2,
+    // Works for both file nodes and sticky notes
+    const node = nodes.find((n) => n.fileId === fromId);
+    const note = stickyNotes.find((n) => n.id === fromId);
+    const cx = node ? node.x + NODE_WIDTH / 2 : note ? note.x + note.width / 2 : 0;
+    const cy = node ? node.y + NODE_HEIGHT / 2 : note ? note.y + note.height / 2 : 0;
+    setLinking({ fromId, mouseX: cx, mouseY: cy });
+  };
+
+  // ─── Sticky Note handlers ───────────────────────────────
+  const handleNoteMouseDown = (e: ReactMouseEvent, noteId: string) => {
+    e.stopPropagation();
+    setContextMenu(null);
+    const note = stickyNotes.find((n) => n.id === noteId);
+    if (!note) return;
+
+    const pos = screenToCanvas(e.clientX, e.clientY);
+    setDragOffset({ x: pos.x - note.x, y: pos.y - note.y });
+    setDraggingNote(noteId);
+    setSelectedNoteId(noteId);
+    onNodeSelect(null);
+  };
+
+  const handleNoteTextChange = (noteId: string, text: string) => {
+    onStickyNotesChange(
+      stickyNotes.map((n) => (n.id === noteId ? { ...n, text } : n))
+    );
+  };
+
+  const handleNoteColorChange = (noteId: string, color: StickyNoteData["color"]) => {
+    onStickyNotesChange(
+      stickyNotes.map((n) => (n.id === noteId ? { ...n, color } : n))
+    );
+  };
+
+  const handleResizeStart = (e: ReactMouseEvent, noteId: string, dir: "right" | "bottom" | "corner") => {
+    const note = stickyNotes.find((n) => n.id === noteId);
+    if (!note) return;
+    setResizing({
+      noteId,
+      dir,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      startW: note.width,
+      startH: note.height,
     });
   };
 
-  // Context menu
+  // ─── Context menu ────────────────────────────────────────
   const handleNodeContextMenu = (e: ReactMouseEvent, nodeId: string) => {
     e.preventDefault();
     e.stopPropagation();
     setContextMenu({ x: e.clientX, y: e.clientY, nodeId });
+  };
+
+  const handleNoteContextMenu = (e: ReactMouseEvent, noteId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, noteId });
   };
 
   // Delete node
@@ -365,25 +564,35 @@ export default function Canvas({
     setContextMenu(null);
   };
 
+  // Delete sticky note
+  const handleDeleteNote = (noteId: string) => {
+    onStickyNotesChange(stickyNotes.filter((n) => n.id !== noteId));
+    onLinksChange(links.filter((l) => l.from !== noteId && l.to !== noteId));
+    if (selectedNoteId === noteId) setSelectedNoteId(null);
+    setContextMenu(null);
+  };
+
   // Delete link
   const handleDeleteLink = (linkId: string) => {
     onLinksChange(links.filter((l) => l.id !== linkId));
   };
 
-  // Render bezier link
-  const renderLink = (link: CanvasLinkData) => {
-    const fromNode = nodes.find((n) => n.fileId === link.from);
-    const toNode = nodes.find((n) => n.fileId === link.to);
-    if (!fromNode || !toNode) return null;
+  // ─── Link rendering helpers ──────────────────────────────
+  const getEntityCenter = (id: string): { x: number; y: number } | null => {
+    const node = nodes.find((n) => n.fileId === id);
+    if (node) return { x: node.x + NODE_WIDTH / 2, y: node.y + NODE_HEIGHT / 2 };
+    const note = stickyNotes.find((n) => n.id === id);
+    if (note) return { x: note.x + note.width / 2, y: note.y + note.height / 2 };
+    return null;
+  };
 
-    const fromScreen = canvasToScreen(
-      fromNode.x + NODE_WIDTH / 2,
-      fromNode.y + NODE_HEIGHT / 2
-    );
-    const toScreen = canvasToScreen(
-      toNode.x + NODE_WIDTH / 2,
-      toNode.y + NODE_HEIGHT / 2
-    );
+  const renderLink = (link: CanvasLinkData) => {
+    const fromCenter = getEntityCenter(link.from);
+    const toCenter = getEntityCenter(link.to);
+    if (!fromCenter || !toCenter) return null;
+
+    const fromScreen = canvasToScreen(fromCenter.x, fromCenter.y);
+    const toScreen = canvasToScreen(toCenter.x, toCenter.y);
 
     const dx = toScreen.x - fromScreen.x;
     const cpOffset = Math.min(Math.abs(dx) * 0.5, 100);
@@ -392,7 +601,6 @@ export default function Canvas({
 
     return (
       <g key={link.id}>
-        {/* Invisible wider path for easier click targeting */}
         <path
           d={path}
           fill="none"
@@ -410,7 +618,6 @@ export default function Canvas({
           opacity={0.6}
           style={{ cursor: "pointer", pointerEvents: "none" }}
         />
-        {/* Midpoint dot */}
         <circle
           cx={(fromScreen.x + toScreen.x) / 2}
           cy={(fromScreen.y + toScreen.y) / 2}
@@ -422,16 +629,12 @@ export default function Canvas({
     );
   };
 
-  // Render temporary link while dragging
   const renderTempLink = () => {
     if (!linking) return null;
-    const fromNode = nodes.find((n) => n.fileId === linking.fromId);
-    if (!fromNode) return null;
+    const fromCenter = getEntityCenter(linking.fromId);
+    if (!fromCenter) return null;
 
-    const fromScreen = canvasToScreen(
-      fromNode.x + NODE_WIDTH / 2,
-      fromNode.y + NODE_HEIGHT / 2
-    );
+    const fromScreen = canvasToScreen(fromCenter.x, fromCenter.y);
     const toScreen = canvasToScreen(linking.mouseX, linking.mouseY);
 
     const dx = toScreen.x - fromScreen.x;
@@ -478,7 +681,7 @@ export default function Canvas({
         {renderTempLink()}
       </svg>
 
-      {/* Nodes */}
+      {/* File Nodes */}
       {nodes.map((node) => {
         const screen = canvasToScreen(node.x, node.y);
         const isSelected = selectedNodeId === node.fileId;
@@ -504,6 +707,30 @@ export default function Canvas({
         );
       })}
 
+      {/* Sticky Notes */}
+      {stickyNotes.map((note) => {
+        const screen = canvasToScreen(note.x, note.y);
+        const isSelected = selectedNoteId === note.id;
+        const isDragging = draggingNote === note.id;
+
+        return (
+          <StickyNoteCard
+            key={note.id}
+            note={note}
+            zoom={viewport.zoom}
+            screenPos={screen}
+            isSelected={isSelected}
+            isDragging={isDragging}
+            onMouseDown={(e) => handleNoteMouseDown(e, note.id)}
+            onTextChange={(text) => handleNoteTextChange(note.id, text)}
+            onColorChange={(color) => handleNoteColorChange(note.id, color)}
+            onResizeStart={(e, dir) => handleResizeStart(e, note.id, dir)}
+            onStartLink={(e) => handleStartLink(e, note.id)}
+            onContextMenu={(e) => handleNoteContextMenu(e, note.id)}
+          />
+        );
+      })}
+
       {/* Context menu */}
       {contextMenu && (
         <>
@@ -515,36 +742,62 @@ export default function Canvas({
             className="canvas-context-menu"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
-            <button
-              className="canvas-context-item"
-              onClick={() => {
-                const node = nodes.find(
-                  (n) => n.fileId === contextMenu.nodeId
-                );
-                if (node) onNodeSelect(node);
-                setContextMenu(null);
-              }}
-            >
-              👁️ Önizleme
-            </button>
-            <button
-              className="canvas-context-item"
-              onClick={() => {
-                handleStartLink(
-                  { stopPropagation: () => {} } as ReactMouseEvent,
-                  contextMenu.nodeId
-                );
-                setContextMenu(null);
-              }}
-            >
-              🔗 Bağlantı Oluştur
-            </button>
-            <button
-              className="canvas-context-item danger"
-              onClick={() => handleDeleteNode(contextMenu.nodeId)}
-            >
-              🗑️ Canvas'tan Kaldır
-            </button>
+            {contextMenu.nodeId && (
+              <>
+                <button
+                  className="canvas-context-item"
+                  onClick={() => {
+                    const node = nodes.find(
+                      (n) => n.fileId === contextMenu.nodeId
+                    );
+                    if (node) onNodeSelect(node);
+                    setContextMenu(null);
+                  }}
+                >
+                  👁️ Önizleme
+                </button>
+                <button
+                  className="canvas-context-item"
+                  onClick={() => {
+                    handleStartLink(
+                      { stopPropagation: () => {} } as ReactMouseEvent,
+                      contextMenu.nodeId!
+                    );
+                    setContextMenu(null);
+                  }}
+                >
+                  🔗 Bağlantı Oluştur
+                </button>
+                <button
+                  className="canvas-context-item danger"
+                  onClick={() => handleDeleteNode(contextMenu.nodeId!)}
+                >
+                  🗑️ Canvas&apos;tan Kaldır
+                </button>
+              </>
+            )}
+            {contextMenu.noteId && (
+              <>
+                <button
+                  className="canvas-context-item"
+                  onClick={() => {
+                    handleStartLink(
+                      { stopPropagation: () => {} } as ReactMouseEvent,
+                      contextMenu.noteId!
+                    );
+                    setContextMenu(null);
+                  }}
+                >
+                  🔗 Bağlantı Oluştur
+                </button>
+                <button
+                  className="canvas-context-item danger"
+                  onClick={() => handleDeleteNote(contextMenu.noteId!)}
+                >
+                  🗑️ Notu Sil
+                </button>
+              </>
+            )}
           </div>
         </>
       )}

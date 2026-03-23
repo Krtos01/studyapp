@@ -19,9 +19,20 @@ export interface CanvasLinkData {
   to: string;
 }
 
+export interface StickyNoteData {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: "yellow" | "green" | "blue" | "purple";
+}
+
 export interface CanvasState {
   nodes: CanvasNodeData[];
   links: CanvasLinkData[];
+  stickyNotes: StickyNoteData[];
   viewport: {
     x: number;
     y: number;
@@ -32,6 +43,7 @@ export interface CanvasState {
 const DEFAULT_STATE: CanvasState = {
   nodes: [],
   links: [],
+  stickyNotes: [],
   viewport: { x: 0, y: 0, zoom: 1 },
 };
 

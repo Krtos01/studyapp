@@ -1260,6 +1260,239 @@ html, body {
   border-top: 1px solid var(--border);
 }
 
+/* ─── Sticky Notes ───────────────────────────────────────── */
+
+.sticky-note {
+  position: absolute;
+  cursor: grab;
+  user-select: none;
+  z-index: 2;
+  transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+  border: none;
+  /* Sharper top corners, no bottom-left (folded) */
+  border-radius: 4px 4px 4px 0;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 20px 100%, 0 calc(100% - 20px));
+  box-shadow: 2px 3px 8px rgba(0,0,0,0.18);
+}
+
+/* Fold triangle mark in bottom-left */
+.sticky-note::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+  clip-path: polygon(0 0, 100% 100%, 0 100%);
+}
+
+/* Per-color backgrounds */
+.sticky-note.color-yellow { background: #fff9c4; }
+.sticky-note.color-yellow::after { background: #f0e68c; }
+
+.sticky-note.color-green { background: #c8e6c9; }
+.sticky-note.color-green::after { background: #a5c9a7; }
+
+.sticky-note.color-blue { background: #bbdefb; }
+.sticky-note.color-blue::after { background: #90c2f0; }
+
+.sticky-note.color-purple { background: #e1bee7; }
+.sticky-note.color-purple::after { background: #c89dd1; }
+
+.sticky-note:hover {
+  box-shadow: 4px 6px 16px rgba(0,0,0,0.22);
+  z-index: 3;
+}
+
+.sticky-note.selected {
+  z-index: 4;
+  box-shadow: 4px 6px 16px rgba(0,0,0,0.25);
+  outline: 2px solid rgba(0,0,0,0.15);
+  outline-offset: 1px;
+}
+
+.sticky-note.dragging {
+  cursor: grabbing;
+  opacity: 0.9;
+  z-index: 5;
+}
+
+/* Textarea */
+.sticky-note-textarea {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #333;
+  font-family: 'Segoe UI', 'Noto Sans', sans-serif;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  padding: 10px 12px;
+  resize: none;
+  outline: none;
+  cursor: text;
+  overflow-y: auto;
+}
+
+.sticky-note-textarea::placeholder {
+  color: rgba(0,0,0,0.3);
+}
+
+.sticky-note-textarea::-webkit-scrollbar {
+  width: 3px;
+}
+
+.sticky-note-textarea::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.15);
+  border-radius: 2px;
+}
+
+/* Drag bar at top of sticky note */
+.sticky-note-dragbar {
+  width: 100%;
+  height: 24px;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 6px;
+  flex-shrink: 0;
+}
+
+.sticky-note-dragbar:active {
+  cursor: grabbing;
+}
+
+/* Color picker dots — hidden by default, shown on hover */
+.sticky-note-colors {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  z-index: 10;
+}
+
+.sticky-note:hover .sticky-note-colors {
+  opacity: 1;
+}
+
+.sticky-note-color-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.7);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.sticky-note-color-dot:hover {
+  transform: scale(1.25);
+  border-color: rgba(255,255,255,1);
+}
+
+.sticky-note-color-dot.active {
+  border-color: rgba(0,0,0,0.4);
+}
+
+.sticky-note-color-dot.dot-yellow { background: #fff9c4; }
+.sticky-note-color-dot.dot-green { background: #c8e6c9; }
+.sticky-note-color-dot.dot-blue { background: #bbdefb; }
+.sticky-note-color-dot.dot-purple { background: #e1bee7; }
+
+/* Resize handles */
+.sticky-note-resize {
+  position: absolute;
+  z-index: 10;
+}
+
+.sticky-note-resize.resize-right {
+  right: -3px;
+  top: 6px;
+  bottom: 6px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.sticky-note-resize.resize-bottom {
+  bottom: -3px;
+  left: 6px;
+  right: 26px; /* Avoid the folded corner */
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.sticky-note-resize.resize-corner {
+  right: -3px;
+  bottom: -3px;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+}
+
+/* Link handle for sticky notes */
+.sticky-note-handle {
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #888;
+  border: 2px solid var(--bg-primary);
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  z-index: 11;
+}
+
+.sticky-note:hover .sticky-note-handle {
+  opacity: 1;
+}
+
+/* Fold corner grab handle */
+.sticky-note-fold-grab {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  cursor: grab;
+  z-index: 10;
+  clip-path: polygon(0 0, 100% 100%, 0 100%);
+}
+
+.sticky-note-fold-grab:active {
+  cursor: grabbing;
+}
+
+/* Add Note toolbar button */
+.btn-add-note {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btn-add-note:hover {
+  border-color: #ffe082;
+  background: rgba(255, 249, 196, 0.12);
+}
+
 /* ─── Zoom Indicator ─────────────────────────────────────── */
 
 .canvas-zoom-indicator {

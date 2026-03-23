@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import Canvas, {
   type CanvasNodeData,
   type CanvasLinkData,
+  type StickyNoteData,
 } from "@/components/Canvas";
 import CategoryDropdown from "@/components/CategoryDropdown";
 import FilePreview from "@/components/FilePreview";
@@ -34,17 +35,18 @@ export default function CourseDetailPage() {
   const [courseName, setCourseName] = useState("");
   const [nodes, setNodes] = useState<CanvasNodeData[]>([]);
   const [links, setLinks] = useState<CanvasLinkData[]>([]);
+  const [stickyNotes, setStickyNotes] = useState<StickyNoteData[]>([]);
   const [viewport, setViewport] = useState({ x: 60, y: 60, zoom: 1 });
   const [selectedNode, setSelectedNode] = useState<CanvasNodeData | null>(null);
   const [loading, setLoading] = useState(true);
   const canvasMainRef = useRef<HTMLDivElement>(null);
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const stateRef = useRef({ nodes, links, viewport });
+  const stateRef = useRef({ nodes, links, stickyNotes, viewport });
 
   useEffect(() => {
-    stateRef.current = { nodes, links, viewport };
-  }, [nodes, links, viewport]);
+    stateRef.current = { nodes, links, stickyNotes, viewport };
+  }, [nodes, links, stickyNotes, viewport]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -73,6 +75,7 @@ export default function CourseDetailPage() {
         if (data) {
           setNodes(data.nodes || []);
           setLinks(data.links || []);
+          setStickyNotes(data.stickyNotes || []);
           setViewport(data.viewport || { x: 60, y: 60, zoom: 1 });
         }
       })
@@ -86,11 +89,11 @@ export default function CourseDetailPage() {
       clearTimeout(saveTimeoutRef.current);
     }
     saveTimeoutRef.current = setTimeout(() => {
-      const { nodes, links, viewport } = stateRef.current;
+      const { nodes, links, stickyNotes, viewport } = stateRef.current;
       fetch(`/api/courses/${courseId}/canvas`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nodes, links, viewport }),
+        body: JSON.stringify({ nodes, links, stickyNotes, viewport }),
       }).catch(console.error);
     }, 2000);
   }, [courseId]);
@@ -98,7 +101,24 @@ export default function CourseDetailPage() {
   // Save on changes
   useEffect(() => {
     if (!loading) triggerSave();
-  }, [nodes, links, viewport, loading, triggerSave]);
+  }, [nodes, links, stickyNotes, viewport, loading, triggerSave]);
+
+  // Add sticky note
+  const handleAddStickyNote = () => {
+    const rect = canvasMainRef.current?.getBoundingClientRect();
+    const centerX = rect ? (rect.width / 2 - viewport.x) / viewport.zoom : 300;
+    const centerY = rect ? (rect.height / 2 - viewport.y) / viewport.zoom : 200;
+    const newNote: StickyNoteData = {
+      id: `note-${Date.now()}`,
+      text: "",
+      x: centerX - 100,
+      y: centerY - 75,
+      width: 200,
+      height: 150,
+      color: "yellow",
+    };
+    setStickyNotes((prev) => [...prev, newNote]);
+  };
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -190,6 +210,9 @@ export default function CourseDetailPage() {
               onAddToCanvas={(file) => handleAddToCanvas(file, cat.name)}
             />
           ))}
+          <button className="btn-add-note" onClick={handleAddStickyNote}>
+            📌 Not
+          </button>
         </div>
 
         <div className="canvas-toolbar-right">
@@ -216,9 +239,11 @@ export default function CourseDetailPage() {
             courseId={courseId}
             nodes={nodes}
             links={links}
+            stickyNotes={stickyNotes}
             viewport={viewport}
             onNodesChange={setNodes}
             onLinksChange={setLinks}
+            onStickyNotesChange={setStickyNotes}
             onViewportChange={setViewport}
             onNodeSelect={handleNodeSelect}
             selectedNodeId={selectedNode?.fileId ?? null}
