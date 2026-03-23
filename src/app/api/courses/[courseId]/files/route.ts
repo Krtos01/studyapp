@@ -7,22 +7,13 @@ import {
   uploadFile,
   CategoryName,
 } from "@/lib/drive";
-import { Readable } from "stream";
 
 interface Params {
   params: Promise<{ courseId: string }>;
 }
 
-export const config = {
-  api: {
-    bodyParser: false, // Disabling Next.js parser to handle large FormData manually or via specialized middleware if needed
-    // However, App Router doesn't use `export const config` anymore for this.
-    // Instead, it relies on Next.js 14 server config. Let's use `serverActions` or similar if needed.
-  },
-};
-
-// Next.js App Router body size limit override:
-export const maxDuration = 60; // Max execution time for vercel
+// Max execution time for Vercel Serverless Functions
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest, { params }: Params) {
   const session = await getServerSession(authOptions);
@@ -94,16 +85,12 @@ export async function POST(request: NextRequest, { params }: Params) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Convert Buffer to a readable stream for googleapis using Readable.from
-    // This is much safer for Vercel Serverless environments
-    const stream = Readable.from(buffer);
-
     const uploaded = await uploadFile(
       session.accessToken,
       catFolder.id,
       file.name,
       file.type,
-      stream as unknown as Buffer
+      buffer
     );
 
     return NextResponse.json(uploaded, { status: 201 });

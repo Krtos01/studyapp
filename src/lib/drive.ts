@@ -1,4 +1,5 @@
 import { google, drive_v3 } from "googleapis";
+import { Readable } from "stream";
 
 const CATEGORY_FOLDERS = [
   "Hoca Materyalleri",
@@ -231,9 +232,10 @@ export async function uploadFile(
   folderId: string,
   fileName: string,
   mimeType: string,
-  body: Buffer | ReadableStream | Uint8Array
+  body: Buffer
 ): Promise<DriveFile> {
   const drive = getDriveClient(accessToken);
+  const stream = Readable.from(body);
 
   const res = await drive.files.create({
     requestBody: {
@@ -242,7 +244,7 @@ export async function uploadFile(
     },
     media: {
       mimeType,
-      body: body as unknown as NodeJS.ReadableStream,
+      body: stream,
     },
     fields: "id, name, mimeType, size, createdTime, webViewLink",
   });
